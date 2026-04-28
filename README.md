@@ -4,9 +4,10 @@
 ![TensorFlow](https://img.shields.io/badge/TensorFlow-2.13-orange?logo=tensorflow)
 ![MLflow](https://img.shields.io/badge/MLflow-2.19-blue?logo=mlflow)
 ![Scikit-learn](https://img.shields.io/badge/Scikit--learn-1.3-orange?logo=scikit-learn)
-![Status](https://img.shields.io/badge/Status-Complete-green)
+![Status](https://img.shields.io/badge/Status-Production-green)
+![API](https://img.shields.io/badge/API-REST-brightgreen)
 
-> Comparaison complète de 5 architectures Deep Learning (MLP, CNN 1D, LSTM, GRU, CNN+LSTM) pour la reconnaissance automatique d'activités humaines à partir de capteurs smartphone. Tous les runs sont trackés avec MLflow.
+> Comparaison complète de 5 architectures Deep Learning (MLP, CNN 1D, LSTM, GRU, CNN+LSTM) pour la reconnaissance automatique d'activités humaines à partir de capteurs smartphone. Tous les modèles sont trackés avec MLflow, versionnés dans le Model Registry et déployés comme API REST.
 
 ---
 
@@ -21,6 +22,68 @@
 | GRU | 0.8331 | 0.8332 | 1485.88 |
 
 ![Comparaison des modèles](results/comparaison_modeles.png)
+
+---
+
+## 🚀 Déploiement Production
+
+### MLflow Model Registry
+
+5 modèles versionnés et enregistrés :
+
+```
+HAR_MLP      → version 1
+HAR_CNN1D    → version 1 ← déployé en production
+HAR_LSTM     → version 1
+HAR_GRU      → version 1
+HAR_CNN_LSTM → version 1
+```
+
+### API REST — MLflow Serve
+
+```bash
+export MLFLOW_TRACKING_URI="file:///path/to/mlruns"
+
+mlflow models serve \
+  --model-uri "models:/HAR_CNN1D/1" \
+  --port 5002 \
+  --no-conda \
+  --env-manager local
+```
+
+### Test de l'API
+
+```python
+import requests
+import numpy as np
+import json
+
+# 561 features capteurs smartphone
+data = np.random.randn(1, 561).tolist()
+
+response = requests.post(
+    "http://127.0.0.1:5002/invocations",
+    headers={"Content-Type": "application/json"},
+    data=json.dumps({"inputs": data})
+)
+
+# Résultat : probabilités pour chaque activité
+print(response.json())
+# {'predictions': [[0.001, 0.0003, 0.0002, 0.9982, 0.000002, 0.0001]]}
+#                                              ↑
+#                              SITTING avec 99.82% de confiance
+```
+
+### Classes prédites
+
+```
+0 → WALKING
+1 → WALKING_UPSTAIRS
+2 → WALKING_DOWNSTAIRS
+3 → SITTING
+4 → STANDING
+5 → LAYING
+```
 
 ---
 
@@ -39,12 +102,12 @@ Identifier automatiquement une activité humaine à partir des capteurs d'un sma
 ```
 projet-dl-har/
 ├── notebooks/
-│   └── projet1_har.ipynb      ← Notebook complet
+│   └── projet1_har.ipynb       ← Notebook complet
 ├── results/
 │   └── comparaison_modeles.png ← Graphique comparatif
-├── models/                     ← Modèles sauvegardés (MLflow)
+├── models/                      ← Modèles MLflow
 ├── data/
-│   └── .gitkeep               ← Dataset à télécharger séparément
+│   └── README.md               ← Instructions dataset
 ├── requirements.txt
 └── README.md
 ```
@@ -62,17 +125,6 @@ projet-dl-har/
 | Features | 561 |
 | Classes | 6 |
 
-**6 activités :**
-```
-1 → WALKING
-2 → WALKING_UPSTAIRS
-3 → WALKING_DOWNSTAIRS
-4 → SITTING
-5 → STANDING
-6 → LAYING
-```
-
-**Téléchargement :**
 ```bash
 cd data
 curl -O "https://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip"
@@ -83,15 +135,7 @@ unzip "UCI HAR Dataset.zip"
 
 ## 🏗️ Architectures
 
-### MLP
-```
-Input(561) → Dense(256, ReLU) → Dropout(0.3)
-           → Dense(128, ReLU) → Dropout(0.3)
-           → Dense(64, ReLU)
-           → Dense(6, Softmax)
-```
-
-### CNN 1D
+### 🥇 CNN 1D — Meilleure accuracy
 ```
 Input(561,1) → Conv1D(64, k=3, ReLU) → MaxPooling1D(2)
              → Conv1D(128, k=3, ReLU) → MaxPooling1D(2)
@@ -99,18 +143,24 @@ Input(561,1) → Conv1D(64, k=3, ReLU) → MaxPooling1D(2)
              → Dense(6, Softmax)
 ```
 
+### 🥈 MLP — Meilleur ratio vitesse/accuracy
+```
+Input(561) → Dense(256, ReLU) → Dropout(0.3)
+           → Dense(128, ReLU) → Dropout(0.3)
+           → Dense(64, ReLU)
+           → Dense(6, Softmax)
+```
+
 ### LSTM
 ```
-Input(561,1) → LSTM(128, return_seq=True)
-             → LSTM(64)
+Input(561,1) → LSTM(128, return_seq=True) → LSTM(64)
              → Dense(64, ReLU) → Dropout(0.3)
              → Dense(6, Softmax)
 ```
 
 ### GRU
 ```
-Input(561,1) → GRU(128, return_seq=True)
-             → GRU(64)
+Input(561,1) → GRU(128, return_seq=True) → GRU(64)
              → Dense(64, ReLU) → Dropout(0.3)
              → Dense(6, Softmax)
 ```
@@ -125,70 +175,59 @@ Input(561,1) → Conv1D(64, k=3, ReLU) → MaxPooling1D(2)
 
 ---
 
-## 🔍 Conclusions scientifiques
-
-**1. CNN 1D — Meilleure accuracy (95.55%)**
-CNN 1D détecte efficacement les patterns locaux dans les 561 features pré-calculées. Les filtres convolutifs capturent des corrélations locales entre features adjacentes, ce qui explique sa supériorité.
-
-**2. MLP — Meilleur rapport accuracy/vitesse**
-Avec 92.13% d'accuracy en seulement 15 secondes, MLP est le choix optimal quand la vitesse d'entraînement est prioritaire. Sa simplicité est un avantage sur des features déjà extraites.
-
-**3. LSTM et GRU — Sous-performances sur features pré-calculées**
-LSTM et GRU sont conçus pour les séquences temporelles brutes. Sur des features statistiques déjà calculées, ils n'apportent pas de valeur ajoutée et sont beaucoup plus lents. Ils seraient plus performants sur les signaux bruts des capteurs.
-
-**4. CNN+LSTM — Compromis intéressant**
-La combinaison CNN+LSTM (84.80%) bénéficie de l'extraction de features par CNN avant l'apprentissage séquentiel LSTM, ce qui explique sa supériorité sur LSTM seul.
-
----
-
-## 🛠️ Installation
-
-```bash
-# Cloner le repo
-git clone https://github.com/bipanda93/projet-dl-har.git
-cd projet-dl-har
-
-# Créer l'environnement
-conda create -n dl_env python=3.10 -y
-conda activate dl_env
-
-# Installer les dépendances
-pip install -r requirements.txt
-
-# Télécharger le dataset
-cd data
-curl -O "https://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip"
-unzip "UCI HAR Dataset.zip"
-cd ..
-
-# Lancer MLflow UI
-mlflow ui --backend-store-uri file:///path/to/mlruns --port 5001
-
-# Ouvrir le notebook
-jupyter notebook notebooks/projet1_har.ipynb
-```
-
----
-
 ## 📈 MLflow Tracking
-
-Tous les runs sont trackés avec MLflow :
 
 ```python
 mlflow.set_experiment("projet1_har")
 
 with mlflow.start_run(run_name="CNN1D"):
     mlflow.log_param("model", "CNN1D")
-    mlflow.log_metric("accuracy", acc)
-    mlflow.log_metric("f1_score", f1)
-    mlflow.log_metric("duree_sec", duree)
+    mlflow.log_metric("accuracy", 0.9555)
+    mlflow.log_metric("f1_score", 0.9554)
+    mlflow.tensorflow.log_model(
+        model,
+        artifact_path="model",
+        registered_model_name="HAR_CNN1D"
+    )
 ```
 
-**Lancer l'interface MLflow :**
+**Lancer MLflow UI :**
 ```bash
-mlflow ui --backend-store-uri file:///Users/macbook/Desktop/mlruns --port 5001
+mlflow ui --backend-store-uri file:///path/to/mlruns --port 5001
 ```
-Puis ouvrir : `http://127.0.0.1:5001`
+
+---
+
+## 🔍 Conclusions scientifiques
+
+**1. CNN 1D — Champion (95.55%)**
+Les filtres convolutifs 1D détectent des corrélations locales entre features adjacentes, surpassant tous les autres modèles.
+
+**2. MLP — Efficacité maximale**
+92.13% d'accuracy en 15 secondes. Sur des features pré-calculées, la simplicité du MLP est un avantage décisif.
+
+**3. LSTM/GRU — Inadaptés aux features pré-calculées**
+Conçus pour les signaux bruts, ils sont jusqu'à 110x plus lents que MLP sans gain d'accuracy.
+
+**4. CNN+LSTM — Compromis intéressant**
+84.80% — CNN extrait les features avant que LSTM apprenne les patterns temporels.
+
+---
+
+## 🛠️ Installation
+
+```bash
+git clone https://github.com/bipanda93/projet-dl-har.git
+cd projet-dl-har
+conda create -n dl_env python=3.10 -y
+conda activate dl_env
+pip install -r requirements.txt
+cd data
+curl -O "https://archive.ics.uci.edu/ml/machine-learning-databases/00240/UCI%20HAR%20Dataset.zip"
+unzip "UCI HAR Dataset.zip"
+cd ..
+jupyter notebook notebooks/projet1_har.ipynb
+```
 
 ---
 
