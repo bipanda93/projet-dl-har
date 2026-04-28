@@ -1,0 +1,24 @@
+# Dataset — trop lourd pour GitHub
+data/UCI HAR Dataset/
+data/*.zip
+
+# MLflow runs
+mlruns/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.env
+.venv
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# macOS
+.DS_Store
+
+# Models
+models/*.h5
+models/*.pkl
